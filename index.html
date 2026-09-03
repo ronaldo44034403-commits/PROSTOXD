@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XD — pastel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;800&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+@media (prefers-reduced-motion: reduce){
+  .particle{animation:none !important; opacity:0 !important;}
+}
+
+:root{
+  --lav:#efe6f4;
+  --rose:#e8a3b6;
+  --ink:#3a2f42;
+  --white:#fffaf9;
+  --deep:#1b1330;
+}
+
+body{
+  position:relative;
+  min-height:100svh;
+  color:var(--ink);
+  font-family:'IBM Plex Sans',sans-serif;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  padding:3rem 1.6rem;
+  overflow:hidden;
+  background:var(--deep);
+}
+
+/* фон — файл ii.png, лежит в той же папке что и index.html */
+.bg{
+  position:fixed;
+  inset:-3%;
+  background-image:url('ii.png');
+  background-size:cover;
+  background-position:center 22%;
+  filter:blur(9px) saturate(1.05) brightness(0.9);
+  transform:scale(1.06);
+  z-index:0;
+}
+
+.bg::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:linear-gradient(180deg, rgba(27,19,48,.55) 0%, rgba(27,19,48,.72) 55%, rgba(27,19,48,.88) 100%);
+}
+
+.particles{
+  position:fixed;
+  inset:0;
+  z-index:1;
+  pointer-events:none;
+  overflow:hidden;
+}
+
+.particle{
+  position:absolute;
+  top:-10px;
+  border-radius:50%;
+  will-change:transform, opacity;
+}
+
+
+@keyframes fall0{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.74; }
+  92%  { opacity:0.74; }
+  100% { transform: translate(-32.0px, 110vh) translateX(-32.0px); opacity:0; }
+}
+
+@keyframes fall1{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.86; }
+  92%  { opacity:0.86; }
+  100% { transform: translate(-6.0px, 110vh) translateX(-6.0px); opacity:0; }
+}
+
+@keyframes fall2{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.56; }
+  92%  { opacity:0.56; }
+  100% { transform: translate(-36.0px, 110vh) translateX(-36.0px); opacity:0; }
+}
+
+@keyframes fall3{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.54; }
+  92%  { opacity:0.54; }
+  100% { transform: translate(25.0px, 110vh) translateX(25.0px); opacity:0; }
+}
+
+@keyframes fall4{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.7; }
+  92%  { opacity:0.7; }
+  100% { transform: translate(10.0px, 110vh) translateX(10.0px); opacity:0; }
+}
+
+@keyframes fall5{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.8; }
+  92%  { opacity:0.8; }
+  100% { transform: translate(24.0px, 110vh) translateX(24.0px); opacity:0; }
+}
+
+@keyframes fall6{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.49; }
+  92%  { opacity:0.49; }
+  100% { transform: translate(9.0px, 110vh) translateX(9.0px); opacity:0; }
+}
+
+@keyframes fall7{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.74; }
+  92%  { opacity:0.74; }
+  100% { transform: translate(21.0px, 110vh) translateX(21.0px); opacity:0; }
+}
+
+@keyframes fall8{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.5; }
+  92%  { opacity:0.5; }
+  100% { transform: translate(-34.0px, 110vh) translateX(-34.0px); opacity:0; }
+}
+
+@keyframes fall9{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.86; }
+  92%  { opacity:0.86; }
+  100% { transform: translate(39.0px, 110vh) translateX(39.0px); opacity:0; }
+}
+
+@keyframes fall10{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.7; }
+  92%  { opacity:0.7; }
+  100% { transform: translate(9.0px, 110vh) translateX(9.0px); opacity:0; }
+}
+
+@keyframes fall11{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.67; }
+  92%  { opacity:0.67; }
+  100% { transform: translate(-34.0px, 110vh) translateX(-34.0px); opacity:0; }
+}
+
+@keyframes fall12{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.79; }
+  92%  { opacity:0.79; }
+  100% { transform: translate(39.0px, 110vh) translateX(39.0px); opacity:0; }
+}
+
+@keyframes fall13{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.74; }
+  92%  { opacity:0.74; }
+  100% { transform: translate(-1.0px, 110vh) translateX(-1.0px); opacity:0; }
+}
+
+@keyframes fall14{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.71; }
+  92%  { opacity:0.71; }
+  100% { transform: translate(15.0px, 110vh) translateX(15.0px); opacity:0; }
+}
+
+@keyframes fall15{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.65; }
+  92%  { opacity:0.65; }
+  100% { transform: translate(-9.0px, 110vh) translateX(-9.0px); opacity:0; }
+}
+
+@keyframes fall16{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.75; }
+  92%  { opacity:0.75; }
+  100% { transform: translate(-31.0px, 110vh) translateX(-31.0px); opacity:0; }
+}
+
+@keyframes fall17{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.76; }
+  92%  { opacity:0.76; }
+  100% { transform: translate(30.0px, 110vh) translateX(30.0px); opacity:0; }
+}
+
+@keyframes fall18{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.68; }
+  92%  { opacity:0.68; }
+  100% { transform: translate(39.0px, 110vh) translateX(39.0px); opacity:0; }
+}
+
+@keyframes fall19{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.55; }
+  92%  { opacity:0.55; }
+  100% { transform: translate(1.0px, 110vh) translateX(1.0px); opacity:0; }
+}
+
+@keyframes fall20{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.88; }
+  92%  { opacity:0.88; }
+  100% { transform: translate(38.0px, 110vh) translateX(38.0px); opacity:0; }
+}
+
+@keyframes fall21{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.7; }
+  92%  { opacity:0.7; }
+  100% { transform: translate(3.0px, 110vh) translateX(3.0px); opacity:0; }
+}
+
+@keyframes fall22{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.82; }
+  92%  { opacity:0.82; }
+  100% { transform: translate(25.0px, 110vh) translateX(25.0px); opacity:0; }
+}
+
+@keyframes fall23{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.55; }
+  92%  { opacity:0.55; }
+  100% { transform: translate(-2.0px, 110vh) translateX(-2.0px); opacity:0; }
+}
+
+@keyframes fall24{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.5; }
+  92%  { opacity:0.5; }
+  100% { transform: translate(-34.0px, 110vh) translateX(-34.0px); opacity:0; }
+}
+
+@keyframes fall25{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.78; }
+  92%  { opacity:0.78; }
+  100% { transform: translate(-2.0px, 110vh) translateX(-2.0px); opacity:0; }
+}
+
+@keyframes fall26{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.54; }
+  92%  { opacity:0.54; }
+  100% { transform: translate(-2.0px, 110vh) translateX(-2.0px); opacity:0; }
+}
+
+@keyframes fall27{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.49; }
+  92%  { opacity:0.49; }
+  100% { transform: translate(19.0px, 110vh) translateX(19.0px); opacity:0; }
+}
+
+@keyframes fall28{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.75; }
+  92%  { opacity:0.75; }
+  100% { transform: translate(9.0px, 110vh) translateX(9.0px); opacity:0; }
+}
+
+@keyframes fall29{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.92; }
+  92%  { opacity:0.92; }
+  100% { transform: translate(2.0px, 110vh) translateX(2.0px); opacity:0; }
+}
+
+@keyframes fall30{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.83; }
+  92%  { opacity:0.83; }
+  100% { transform: translate(0.0px, 110vh) translateX(0.0px); opacity:0; }
+}
+
+@keyframes fall31{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.86; }
+  92%  { opacity:0.86; }
+  100% { transform: translate(13.0px, 110vh) translateX(13.0px); opacity:0; }
+}
+
+@keyframes fall32{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.67; }
+  92%  { opacity:0.67; }
+  100% { transform: translate(-39.0px, 110vh) translateX(-39.0px); opacity:0; }
+}
+
+@keyframes fall33{
+  0%   { transform: translate(0, -10vh) translateX(0); opacity:0; }
+  8%   { opacity:0.61; }
+  92%  { opacity:0.61; }
+  100% { transform: translate(5.0px, 110vh) translateX(5.0px); opacity:0; }
+}
+
+.content{
+  position:relative;
+  z-index:2;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+}
+
+.avatar{
+  width:180px;
+  height:180px;
+  border-radius:50%;
+  overflow:hidden;
+  box-shadow:0 0 0 5px rgba(255,255,255,.85), 0 18px 44px rgba(0,0,0,.45), 0 0 46px rgba(232,163,182,.35);
+  margin-bottom:1.7rem;
+}
+.avatar img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  object-position:center 15%;
+  display:block;
+}
+
+h1{
+  font-family:'Sora',sans-serif;
+  font-weight:800;
+  font-size:2.6rem;
+  margin:0 0 .4rem;
+  color:#fffaf9;
+  text-shadow:0 2px 18px rgba(0,0,0,.35);
+}
+
+p{
+  max-width:32ch;
+  text-align:center;
+  line-height:1.6;
+  color:#e6dcec;
+  margin:0 0 1.8rem;
+}
+
+.btn{
+  display:inline-flex;
+  align-items:center;
+  gap:.5rem;
+  padding:.9rem 1.8rem;
+  background:var(--rose);
+  color:#fff;
+  text-decoration:none;
+  font-weight:600;
+  border-radius:999px;
+  box-shadow:0 10px 28px rgba(232,163,182,.4);
+  transition:transform .15s ease, box-shadow .15s ease;
+}
+.btn:hover{
+  transform:translateY(-2px);
+  box-shadow:0 14px 34px rgba(232,163,182,.55);
+}
+.btn:focus-visible{
+  outline:2px solid #fff;
+  outline-offset:3px;
+}
+
+.handle{
+  margin-top:1rem;
+  color:#cdbdd6;
+  font-size:.9rem;
+}
+</style>
+</head>
+<body>
+
+<div class="bg"></div>
+<div class="particles">
+<span class="particle" style="left:32.4%; width:2.5px; height:2.5px; background:#b8c2ff; box-shadow:0 0 5.5px #b8c2ff; filter:blur(1.1px); animation: fall0 12.9s linear -14.8s infinite;"></span>
+<span class="particle" style="left:21.5%; width:2.3px; height:2.3px; background:#b8c2ff; box-shadow:0 0 5.06px #b8c2ff; filter:blur(0.1px); animation: fall1 10.8s linear -12.1s infinite;"></span>
+<span class="particle" style="left:22.3%; width:3.9px; height:3.9px; background:#ffd1e8; box-shadow:0 0 8.58px #ffd1e8; filter:blur(0.7px); animation: fall2 15.5s linear -6.8s infinite;"></span>
+<span class="particle" style="left:13.3%; width:3.3px; height:3.3px; background:#b8c2ff; box-shadow:0 0 7.26px #b8c2ff; filter:blur(0.7px); animation: fall3 11.9s linear -6.9s infinite;"></span>
+<span class="particle" style="left:63.9%; width:3.1px; height:3.1px; background:#ff9fd6; box-shadow:0 0 6.820000000000001px #ff9fd6; filter:blur(0.6px); animation: fall4 11.9s linear -15.0s infinite;"></span>
+<span class="particle" style="left:77.7%; width:3.4px; height:3.4px; background:#c9a3ff; box-shadow:0 0 7.48px #c9a3ff; filter:blur(0.3px); animation: fall5 15.3s linear -10.2s infinite;"></span>
+<span class="particle" style="left:57.4%; width:3.6px; height:3.6px; background:#8fd9ff; box-shadow:0 0 7.920000000000001px #8fd9ff; filter:blur(0.6px); animation: fall6 14.9s linear -4.3s infinite;"></span>
+<span class="particle" style="left:16.5%; width:3.0px; height:3.0px; background:#ff9fd6; box-shadow:0 0 6.6000000000000005px #ff9fd6; filter:blur(1.1px); animation: fall7 15.4s linear -9.3s infinite;"></span>
+<span class="particle" style="left:31.4%; width:4.1px; height:4.1px; background:#ffd1e8; box-shadow:0 0 9.02px #ffd1e8; filter:blur(0.3px); animation: fall8 12.3s linear -6.7s infinite;"></span>
+<span class="particle" style="left:69.7%; width:2.2px; height:2.2px; background:#b8c2ff; box-shadow:0 0 4.840000000000001px #b8c2ff; filter:blur(0.3px); animation: fall9 13.6s linear -11.0s infinite;"></span>
+<span class="particle" style="left:38.6%; width:4.0px; height:4.0px; background:#c9a3ff; box-shadow:0 0 8.8px #c9a3ff; filter:blur(0.3px); animation: fall10 7.2s linear -8.6s infinite;"></span>
+<span class="particle" style="left:28.7%; width:4.2px; height:4.2px; background:#ffd1e8; box-shadow:0 0 9.240000000000002px #ffd1e8; filter:blur(0.7px); animation: fall11 10.6s linear -1.3s infinite;"></span>
+<span class="particle" style="left:88.3%; width:4.5px; height:4.5px; background:#ffd1e8; box-shadow:0 0 9.9px #ffd1e8; filter:blur(0.5px); animation: fall12 14.8s linear -11.5s infinite;"></span>
+<span class="particle" style="left:23.1%; width:2.2px; height:2.2px; background:#ff9fd6; box-shadow:0 0 4.840000000000001px #ff9fd6; filter:blur(0.3px); animation: fall13 8.4s linear -5.5s infinite;"></span>
+<span class="particle" style="left:0.4%; width:3.3px; height:3.3px; background:#c9a3ff; box-shadow:0 0 7.26px #c9a3ff; filter:blur(0.7px); animation: fall14 10.3s linear -6.9s infinite;"></span>
+<span class="particle" style="left:67.6%; width:2.2px; height:2.2px; background:#b8c2ff; box-shadow:0 0 4.840000000000001px #b8c2ff; filter:blur(0.1px); animation: fall15 15.1s linear -3.5s infinite;"></span>
+<span class="particle" style="left:63.4%; width:2.2px; height:2.2px; background:#c9a3ff; box-shadow:0 0 4.840000000000001px #c9a3ff; filter:blur(0.1px); animation: fall16 7.6s linear -12.7s infinite;"></span>
+<span class="particle" style="left:56.7%; width:3.6px; height:3.6px; background:#ff9fd6; box-shadow:0 0 7.920000000000001px #ff9fd6; filter:blur(0.2px); animation: fall17 15.5s linear -6.2s infinite;"></span>
+<span class="particle" style="left:25.2%; width:3.0px; height:3.0px; background:#ffd1e8; box-shadow:0 0 6.6000000000000005px #ffd1e8; filter:blur(0.6px); animation: fall18 10.3s linear -14.0s infinite;"></span>
+<span class="particle" style="left:8.6%; width:2.3px; height:2.3px; background:#c9a3ff; box-shadow:0 0 5.06px #c9a3ff; filter:blur(1.1px); animation: fall19 10.1s linear -11.8s infinite;"></span>
+<span class="particle" style="left:36.2%; width:4.1px; height:4.1px; background:#8fd9ff; box-shadow:0 0 9.02px #8fd9ff; filter:blur(0.8px); animation: fall20 15.2s linear -3.9s infinite;"></span>
+<span class="particle" style="left:26.1%; width:3.1px; height:3.1px; background:#b8c2ff; box-shadow:0 0 6.820000000000001px #b8c2ff; filter:blur(0.8px); animation: fall21 8.5s linear -3.6s infinite;"></span>
+<span class="particle" style="left:61.3%; width:4.4px; height:4.4px; background:#c9a3ff; box-shadow:0 0 9.680000000000001px #c9a3ff; filter:blur(0.3px); animation: fall22 13.8s linear -12.9s infinite;"></span>
+<span class="particle" style="left:51.8%; width:3.1px; height:3.1px; background:#8fd9ff; box-shadow:0 0 6.820000000000001px #8fd9ff; filter:blur(0.7px); animation: fall23 7.3s linear -15.6s infinite;"></span>
+<span class="particle" style="left:34.4%; width:4.4px; height:4.4px; background:#8fd9ff; box-shadow:0 0 9.680000000000001px #8fd9ff; filter:blur(0.6px); animation: fall24 13.5s linear -10.4s infinite;"></span>
+<span class="particle" style="left:33.8%; width:3.4px; height:3.4px; background:#ff9fd6; box-shadow:0 0 7.48px #ff9fd6; filter:blur(1.0px); animation: fall25 15.9s linear -6.2s infinite;"></span>
+<span class="particle" style="left:8.5%; width:4.0px; height:4.0px; background:#c9a3ff; box-shadow:0 0 8.8px #c9a3ff; filter:blur(0.9px); animation: fall26 15.2s linear -3.5s infinite;"></span>
+<span class="particle" style="left:33.3%; width:4.4px; height:4.4px; background:#ffd1e8; box-shadow:0 0 9.680000000000001px #ffd1e8; filter:blur(0.2px); animation: fall27 15.7s linear -9.7s infinite;"></span>
+<span class="particle" style="left:99.3%; width:2.1px; height:2.1px; background:#c9a3ff; box-shadow:0 0 4.620000000000001px #c9a3ff; filter:blur(0.6px); animation: fall28 12.3s linear -8.6s infinite;"></span>
+<span class="particle" style="left:93.7%; width:2.5px; height:2.5px; background:#ff9fd6; box-shadow:0 0 5.5px #ff9fd6; filter:blur(0.5px); animation: fall29 11.9s linear -15.7s infinite;"></span>
+<span class="particle" style="left:87.2%; width:4.5px; height:4.5px; background:#8fd9ff; box-shadow:0 0 9.9px #8fd9ff; filter:blur(0.4px); animation: fall30 8.9s linear -12.0s infinite;"></span>
+<span class="particle" style="left:54.4%; width:4.5px; height:4.5px; background:#ffd1e8; box-shadow:0 0 9.9px #ffd1e8; filter:blur(0.6px); animation: fall31 7.5s linear -4.2s infinite;"></span>
+<span class="particle" style="left:82.7%; width:4.6px; height:4.6px; background:#b8c2ff; box-shadow:0 0 10.12px #b8c2ff; filter:blur(0.2px); animation: fall32 8.2s linear -13.6s infinite;"></span>
+<span class="particle" style="left:0.4%; width:4.4px; height:4.4px; background:#ff9fd6; box-shadow:0 0 9.680000000000001px #ff9fd6; filter:blur(0.6px); animation: fall33 8.6s linear -8.4s infinite;"></span>
+</div>
+
+<div class="content">
+  <!-- кружок — файл i.png, лежит в той же папке что и index.html -->
+  <div class="avatar"><img src="i.png" alt="Аниме-иллюстрация"></div>
+  <h1>XD</h1>
+  <p>Html,java,python,hacker'dev</p>
+  <a class="btn" href="https://t.me/PR0ST0XD" target="_blank" rel="noopener">Написать в Telegram</a>
+  <div class="handle"></div>
+</div>
+
+</body>
+</html>
