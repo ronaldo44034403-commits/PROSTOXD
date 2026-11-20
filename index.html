@@ -17,7 +17,7 @@ button.p{background:linear-gradient(90deg,var(--a),var(--b))}button.d{background
 .proj,.usr{padding:10px;border-radius:10px;border:1px solid var(--line);margin:4px 0;display:flex;justify-content:space-between;align-items:center;gap:8px}
 .proj.on{border-color:var(--b);background:rgba(34,211,238,.08)}
 pre{margin:6px 0;padding:10px;border-radius:10px;background:rgba(0,0,0,.4);white-space:pre-wrap;word-break:break-word;font-size:12px}
-.s-done{color:#4ade80}.s-running{color:#facc15}.s-pending{color:var(--m)}
+.s-installing{color:#60a5fa}.s-done{color:#4ade80}.s-running{color:#facc15}.s-pending{color:var(--m)}
 small,.msg{color:var(--m)}.msg.err{color:#f87171}.msg.ok{color:#4ade80}
 </style></head><body><div class="w">
 <header><h1>Phone VPS</h1><span class="pill" id="who" hidden></span></header>
@@ -37,7 +37,10 @@ small,.msg{color:var(--m)}.msg.err{color:#f87171}.msg.ok{color:#4ade80}
  <div class="card">
   <input id="name" placeholder="Название проекта">
   <select id="kind"><option value="python">Python</option><option value="shell">Shell</option><option value="service">Сервис (работает постоянно)</option></select>
-  <textarea id="req" placeholder="Библиотеки, по одной в строке, например: requests"></textarea>
+  <input type="file" id="file" accept=".py,.zip,.txt" hidden onchange="pick(this)">
+  <button style="width:100%;margin:4px 0" onclick="$('file').click()">📎 Загрузить .py или .zip</button>
+  <div id="zipbox" class="proj" hidden><span id="zipname"></span><button class="d" onclick="rmZip()">✕</button></div>
+  <textarea id="req" placeholder="Библиотеки, по одной в строке (для ZIP берутся ещё и из requirements.txt внутри)"></textarea>
   <textarea id="code" placeholder="print('привет')"></textarea>
   <div class="row"><button onclick="save()">Сохранить</button><button class="p" onclick="run()">Запуск</button><button class="d" onclick="del()">Удалить</button></div>
   <div id="rmsg" class="msg"></div>
@@ -47,7 +50,32 @@ small,.msg{color:var(--m)}.msg.err{color:#f87171}.msg.ok{color:#4ade80}
 </div></div>
 <script>
 const $=id=>document.getElementById(id);
-let M=null,P=[],cur=null,cfg={},reg=false,timer=null;
+let M=null,P=[],cur=null,cfg={},reg=false,timer=null,ZIP=null,ZMETA=null;
+const ST={pending:'ожидание',installing:'установка',running:'работает',done:'готово'};
+function idb(){return new Promise((ok,no)=>{const r=indexedDB.open('vps',1);r.onupgradeneeded=()=>r.result.createObjectStore('z');r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error);});}
+async function zput(k,v){try{const d=await idb();d.transaction('z','readwrite').objectStore('z').put(v,k);}catch(e){}}
+async function zget(k){try{const d=await idb();return await new Promise(ok=>{const q=d.transaction('z').objectStore('z').get(k);q.onsuccess=()=>ok(q.result||null);q.onerror=()=>ok(null);});}catch(e){return null;}}
+async function zdel(k){try{const d=await idb();d.transaction('z','readwrite').objectStore('z').delete(k);}catch(e){}}
+const zkey=p=>'z:'+M.email+':'+p.id;
+function showZip(){$('zipbox').hidden=!ZMETA;$('code').hidden=!!ZMETA;
+ if(ZMETA)$('zipname').textContent='📦 '+ZMETA.name+' ('+Math.round(ZMETA.size/1024)+' КБ) — запустится main.py';}
+function rmZip(){ZIP=null;ZMETA=null;showZip();}
+function pick(inp){const f=inp.files[0];inp.value='';if(!f)return;
+ const n=f.name.toLowerCase();
+ if(n.endsWith('.zip')){
+  if(f.size>5*1024*1024){msg($('rmsg'),'ZIP больше 5 МБ','err');return;}
+  const r=new FileReader();r.onload=()=>{ZIP=String(r.result).split(',')[1];ZMETA={name:f.name,size:f.size};
+   if(!$('name').value||/^Проект \d+$/.test($('name').value))$('name').value=f.name.replace(/\.zip$/i,'');
+   if($('kind').value==='shell')$('kind').value='python';showZip();msg($('rmsg'),'ZIP загружен. Нажмите «Запуск»','ok');};
+  r.readAsDataURL(f);
+ }else if(n.endsWith('.py')||n.endsWith('.txt')){
+  const r=new FileReader();r.onload=()=>{
+   if(n.endsWith('.txt')){$('req').value=r.result;msg($('rmsg'),'Библиотеки загружены из '+f.name,'ok');}
+   else{$('code').value=r.result;rmZip();if($('kind').value==='shell')$('kind').value='python';
+    if(!$('name').value||/^Проект \d+$/.test($('name').value))$('name').value=f.name.replace(/\.py$/i,'');
+    msg($('rmsg'),'Код загружен из '+f.name,'ok');}};
+  r.readAsText(f);
+ }else msg($('rmsg'),'Нужен файл .py, .zip или .txt','err');}
 async function api(path,body){
  const r=await fetch(path,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
  const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||('Ошибка '+r.status));return j;}
@@ -72,24 +100,33 @@ async function start(){
  P=JSON.parse(localStorage.getItem('p:'+M.email)||'[]');cur=null;load();render();
  $('admin').hidden=!M.admin;if(M.admin)loadUsers();
  clearInterval(timer);timer=setInterval(refresh,3000);refresh();}
-function persist(){localStorage.setItem('p:'+M.email,JSON.stringify(P));}
+function persist(){try{localStorage.setItem('p:'+M.email,JSON.stringify(P));}catch(e){}}
 function render(){const b=$('plist');b.textContent='';
  P.forEach((p,i)=>{const d=document.createElement('div');d.className='proj'+(i===cur?' on':'');
   d.textContent=p.name;const k=document.createElement('small');k.textContent=p.kind;d.appendChild(k);
   d.onclick=()=>{cur=i;load();render();};b.appendChild(d);});}
 function load(){const p=P[cur]||{name:'',kind:'python',req:'',code:''};
- $('name').value=p.name;$('kind').value=p.kind;$('req').value=p.req;$('code').value=p.code;}
-function newP(){P.push({name:'Проект '+(P.length+1),kind:'python',req:'',code:''});cur=P.length-1;persist();load();render();}
+ $('name').value=p.name;$('kind').value=p.kind;$('req').value=p.req;$('code').value=p.code;
+ ZIP=null;ZMETA=p.zip||null;showZip();
+ if(p.zip&&p.id)zget(zkey(p)).then(v=>{if(P[cur]===p){ZIP=v;if(!v)msg($('rmsg'),'ZIP не найден, загрузите заново','err');}});}
+function newP(){P.push({id:Date.now().toString(36),name:'Проект '+(P.length+1),kind:'python',req:'',code:''});cur=P.length-1;persist();load();render();}
 function save(){if(cur===null)newP();
- P[cur]={name:$('name').value||'Без имени',kind:$('kind').value,req:$('req').value,code:$('code').value};persist();render();}
-function del(){if(cur===null)return;P.splice(cur,1);cur=null;persist();load();render();}
+ const old=P[cur],id=old.id||Date.now().toString(36);
+ P[cur]={id,name:$('name').value||'Без имени',kind:$('kind').value,req:$('req').value,code:$('code').value,zip:ZMETA};
+ if(ZMETA&&ZIP)zput(zkey(P[cur]),ZIP);else if(old.zip)zdel(zkey({id}));
+ persist();render();}
+function del(){if(cur===null)return;zdel(zkey(P[cur]));P.splice(cur,1);cur=null;persist();load();render();}
 async function run(){save();msg($('rmsg'));
- try{await api('/api/task',{kind:$('kind').value,code:$('code').value,requirements:$('req').value,name:$('name').value});refresh();}
+ try{if(ZMETA&&!ZIP)throw new Error('ZIP не найден, загрузите заново');
+  if(ZMETA&&$('kind').value==='shell')throw new Error('ZIP нельзя запускать как Shell');
+  const b={kind:$('kind').value,code:$('code').value,requirements:$('req').value,name:$('name').value};
+  if(ZMETA)b.zip=ZIP;
+  await api('/api/task',b);refresh();}
  catch(e){msg($('rmsg'),e.message,'err');}}
 async function refresh(){if(!M)return;
  try{const l=await api('/api/tasks');const box=$('list');box.textContent='';
   for(const t of l.tasks){const d=document.createElement('pre');
-   d.textContent='#'+t.id+' '+(t.name||'')+' ['+t.status+']'+(t.exit_code!=null?' код '+t.exit_code:'')+'\n'+(t.output||'');
+   d.textContent='#'+t.id+' '+(t.name||'')+' ['+(ST[t.status]||t.status)+']'+(t.exit_code!=null?' код '+t.exit_code:'')+'\n'+(t.output||'');
    d.className='s-'+t.status;
    if(t.status!=='done'){const b=document.createElement('button');b.textContent='Стоп';b.onclick=()=>api('/api/stop/'+t.id,{});d.appendChild(b);}
    box.appendChild(d);}
