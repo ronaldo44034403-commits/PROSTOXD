@@ -3,9 +3,7 @@ import hmac, os, subprocess, sys, threading, time, uuid
 from functools import wraps
 from flask import Flask, jsonify, request, Response
 
-TOKEN = os.environ.get("TOKEN", "")
-if len(TOKEN) < 16:
-    raise SystemExit("Задайте переменную окружения TOKEN (минимум 16 символов)")
+TOKEN = "smAHkRGXOSUIuM7v0Z1WuS-v7XEjAQpT"  # <- твой токен, репозиторий держи ПРИВАТНЫМ
 
 app = Flask(__name__)
 lock = threading.Lock()
