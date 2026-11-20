@@ -12,7 +12,7 @@ from functools import wraps
 
 from flask import Flask, jsonify, request, Response
 
-TOKEN = os.environ.get("TOKEN", "")
+TOKEN = os.environ.get("TOKEN") or "sa1iwTJNkDeXybTGRJat64HEMTP0TcAe"
 if len(TOKEN) < 16:
     raise SystemExit("Задайте переменную окружения TOKEN (минимум 16 символов)")
 
