@@ -1,411 +1,421 @@
-import base64, binascii, hashlib, io, os, re, resource, shutil, signal, sqlite3, subprocess, sys, threading, time, uuid, zipfile
-from functools import wraps
-from flask import Flask, jsonify, request, session, Response
-from werkzeug.security import generate_password_hash, check_password_hash
+import asyncio, hashlib, html, io, json, os, re, resource, shutil, signal, sys, time, uuid, zipfile
+from pathlib import Path, PurePosixPath
 
-ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "CHANGE_ME@gmail.com").lower()
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "NfIb1lh10G606zTu")
-SECRET_KEY = os.environ.get("SECRET_KEY", "96a6a7be6bf538f2bfb00998fa8674461f7d2dc609b6feca612e1c82b39615b6")
-GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")  # пусто: вход через Google выключен
+from aiogram import Bot, Dispatcher, F, Router
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
+from aiogram.exceptions import TelegramAPIError, TelegramRetryAfter
+from aiogram.filters import CommandStart, BaseFilter
+from aiogram.types import (BufferedInputFile, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup,
+                           KeyboardButton, Message, ReplyKeyboardMarkup)
 
-app = Flask(__name__)
-app.config.update(MAX_CONTENT_LENGTH=9 * 1024 * 1024, SECRET_KEY=SECRET_KEY, SESSION_COOKIE_HTTPONLY=True,
-                  SESSION_COOKIE_SAMESITE="Lax", SESSION_COOKIE_SECURE=True,
-                  PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 30)
-lock = threading.Lock()
-db = sqlite3.connect("/tmp/vps.db", check_same_thread=False)
-db.execute("create table if not exists users(id integer primary key, email text unique, pw text, approved int, admin int)")
-tasks, order, procs, fails = {}, [], {}, {}
-MAX_TASKS, MAX_CODE, MAX_OUT, MEM = 60, 100_000, 20_000, 400 * 1024 * 1024
-MAX_ZIP, MAX_UNZIP, MAX_FILES = 5 * 1024 * 1024, 30 * 1024 * 1024, 500
-inst_locks = {}
-EMAIL = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,255}\.[^@\s]{2,}$")
+# ВСТАВЛЕН ВАШ ТОКЕН (настоятельно рекомендую поменять его в @BotFather)
+TOKEN = "9241683084:AAHD7FVqTT0XyiVtLxDLQjaGC9jsozVELLg"
+ROOT = Path(os.environ.get("DATA_DIR", "data")).resolve()
+MEM = int(os.environ.get("MEM_MB", "512")) * 1024 * 1024
+MAX_FILE, MAX_UNZIP, MAX_FILES, PER_PAGE = 20 << 20, 80 << 20, 2000, 8
+PID = re.compile(r"[0-9a-f]{8}")
 
+# ================= ФИЛЬТР ПОДПИСКИ НА КАНАЛ =================
+CHANNEL_ID = "@BLACK_AI_soft"
+CHANNEL_URL = "https://t.me/BLACK_AI_soft"
 
-def q(sql, *a):
-    with lock:
-        cur = db.execute(sql, a)
-        db.commit()
-        return cur
-
-
-def init_admin():
-    h = generate_password_hash(ADMIN_PASSWORD)
-    if q("select 1 from users where email=?", ADMIN_EMAIL).fetchone():
-        q("update users set pw=?, approved=1, admin=1 where email=?", h, ADMIN_EMAIL)
-    else:
-        q("insert into users(email,pw,approved,admin) values(?,?,1,1)", ADMIN_EMAIL, h)
-
-
-init_admin()
-
-
-def me():
-    uid = session.get("uid")
-    if not uid:
-        return None
-    r = q("select id,email,approved,admin from users where id=?", uid).fetchone()
-    return dict(id=r[0], email=r[1], approved=bool(r[2]), admin=bool(r[3])) if r and r[2] else None
-
-
-def login_required(admin=False):
-    def deco(fn):
-        @wraps(fn)
-        def w(*a, **k):
-            u = me()
-            if not u or (admin and not u["admin"]):
-                return jsonify(error="unauthorized"), 401
-            return fn(u, *a, **k)
-        return w
-    return deco
-
-
-def throttle(key):
-    now = time.time()
-    fails[key] = [t for t in fails.get(key, []) if now - t < 300]
-    return len(fails[key]) >= 6
-
-
-@app.get("/api/config")
-def config():
-    return jsonify(google=GOOGLE_CLIENT_ID)
-
-
-@app.post("/api/register")
-def register():
-    d = request.get_json(silent=True) or {}
-    email, pw = str(d.get("email", "")).strip().lower(), str(d.get("password", ""))
-    if not EMAIL.match(email) or len(pw) < 8 or len(pw) > 200:
-        return jsonify(error="Нужен email и пароль от 8 символов"), 400
-    if email == ADMIN_EMAIL:
-        return jsonify(error="Этот email занят"), 400
-    try:
-        q("insert into users(email,pw,approved,admin) values(?,?,0,0)", email, generate_password_hash(pw))
-    except sqlite3.IntegrityError:
-        return jsonify(error="Этот email уже зарегистрирован"), 400
-    return jsonify(message="Аккаунт создан. Ждите одобрения администратора.")
-
-
-@app.post("/api/login")
-def login():
-    d = request.get_json(silent=True) or {}
-    email, pw = str(d.get("email", "")).strip().lower(), str(d.get("password", ""))
-    key = request.remote_addr + email
-    if throttle(key):
-        return jsonify(error="Слишком много попыток, подождите 5 минут"), 429
-    r = q("select id,pw,approved from users where email=?", email).fetchone()
-    if not r or not check_password_hash(r[1], pw):
-        fails.setdefault(key, []).append(time.time())
-        return jsonify(error="Неверный email или пароль"), 401
-    if not r[2]:
-        return jsonify(error="Аккаунт ещё не одобрен администратором"), 403
-    session.clear()
-    session.permanent = True
-    session["uid"] = r[0]
-    return jsonify(ok=True)
-
-
-@app.post("/api/google")
-def google_login():
-    if not GOOGLE_CLIENT_ID:
-        return jsonify(error="Google-вход не настроен"), 400
-    try:
-        from google.oauth2 import id_token
-        from google.auth.transport import requests as grq
-        info = id_token.verify_oauth2_token((request.get_json(silent=True) or {}).get("credential", ""),
-                                            grq.Request(), GOOGLE_CLIENT_ID)
-        if not info.get("email_verified"):
-            raise ValueError("email not verified")
-        email = info["email"].lower()
-    except Exception:
-        return jsonify(error="Google не подтвердил вход"), 401
-    r = q("select id,approved from users where email=?", email).fetchone()
-    if not r:
-        q("insert into users(email,pw,approved,admin) values(?,?,?,0)",
-          email, generate_password_hash(uuid.uuid4().hex), 0)
-        r = q("select id,approved from users where email=?", email).fetchone()
-    if not r[1]:
-        return jsonify(error="Аккаунт создан, ждите одобрения администратора"), 403
-    session.clear()
-    session.permanent = True
-    session["uid"] = r[0]
-    return jsonify(ok=True)
-
-
-@app.post("/api/logout")
-def logout():
-    session.clear()
-    return jsonify(ok=True)
-
-
-@app.get("/api/me")
-def whoami():
-    u = me()
-    return jsonify(email=u["email"], admin=u["admin"]) if u else (jsonify(error="no"), 401)
-
-
-@app.get("/api/users")
-@login_required(admin=True)
-def users(u):
-    rows = q("select id,email,approved,admin from users order by approved,id").fetchall()
-    return jsonify(users=[dict(id=r[0], email=r[1], approved=bool(r[2]), admin=bool(r[3])) for r in rows])
-
-
-@app.post("/api/users/<int:uid>/<act>")
-@login_required(admin=True)
-def user_act(u, uid, act):
-    if act == "approve":
-        q("update users set approved=1 where id=?", uid)
-    elif act == "delete":
-        q("delete from users where id=? and admin=0", uid)
-        for t in list(tasks.values()):
-            if t["uid"] == uid:
-                kill(procs.get(t["id"]))
-    else:
-        return jsonify(error="bad action"), 400
-    return jsonify(ok=True)
-
-
-def kill(p):
-    if p and p.poll() is None:
+class IsSubscribed(BaseFilter):
+    async def __call__(self, event: Message | CallbackQuery, bot: Bot) -> bool:
+        user_id = event.from_user.id
         try:
-            os.killpg(p.pid, signal.SIGKILL)
-        except (ProcessLookupError, PermissionError):
-            p.kill()
+            # Проверяем, есть ли пользователь в канале
+            member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
+            if member.status in ("member", "administrator", "creator"):
+                return True
+        except Exception:
+            pass # Если бот не админ или другая ошибка - считаем, что не подписан
 
+        # Если не подписан - отправляем сообщение с кнопкой
+        text = "🛑 Для использования бота подпишитесь на канал!"
+        kb_sub = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📢 Подписаться", url=CHANNEL_URL)],
+            [InlineKeyboardButton(text="✅ Проверить подписку", callback_data="check_sub")]
+        ])
+        
+        if isinstance(event, Message):
+            await event.answer(text, reply_markup=kb_sub)
+        else:
+            await event.answer("❌ Сначала подпишитесь на канал!", show_alert=True)
+        return False
+# ============================================================
+
+r, deny = Router(), Router()
+# Применяем проверку подписки ко всем сообщениям и кнопкам
+r.message.filter(IsSubscribed())
+r.callback_query.filter(IsSubscribed())
+
+runs, groups, jobs = {}, {}, set()
+
+class Run:
+    def __init__(self, log):
+        self.text, self.proc, self.msg = "", None, None
+        self.done = self.stopped = False
+        self.code = None
+        self.t0 = time.time()
+        self.log = open(log, "w", encoding="utf-8")
+
+    def add(self, s):
+        self.text = (self.text + s)[-30000:]
+        self.log.write(s)
+        self.log.flush()
+
+def esc(s):
+    return html.escape(s, quote=False)
+
+def kb(*rows):
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=t, callback_data=d) for t, d in row] for row in rows])
+
+MENU = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="Проекты"), KeyboardButton(text="Загрузить")],
+                                     [KeyboardButton(text="Помощь")]], resize_keyboard=True)
+
+def pdir(uid, pid):
+    return ROOT / str(uid) / pid
+
+def meta(uid, pid):
+    return json.loads((pdir(uid, pid) / "meta.json").read_text(encoding="utf-8"))
+
+def listing(uid):
+    out = [(p.parent.name, json.loads(p.read_text(encoding="utf-8"))) for p in (ROOT / str(uid)).glob("*/meta.json")]
+    return sorted(out, key=lambda x: x[1]["t"])
+
+def kill(run):
+    run.stopped = True
+    if run.proc and run.proc.returncode is None:
+        try:
+            os.killpg(run.proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+def unzip(raw):
+    out, total = {}, 0
+    with zipfile.ZipFile(io.BytesIO(raw)) as z:
+        for i in z.infolist():
+            n = i.filename.replace("\\", "/")
+            if i.is_dir() or n.startswith("__MACOSX/") or PurePosixPath(n).name.startswith("._"):
+                continue
+            p = PurePosixPath(n)
+            if p.is_absolute() or ".." in p.parts:
+                raise ValueError("в архиве небезопасный путь")
+            with z.open(i) as f:
+                data = f.read(MAX_UNZIP - total + 1)
+            total += len(data)
+            if total > MAX_UNZIP or len(out) >= MAX_FILES:
+                raise ValueError("архив слишком большой")
+            out[n] = data
+    return out
+
+def find_entry(files):
+    if len(files) == 1 and next(iter(files)).endswith(".py"):
+        return next(iter(files))
+    mains = sorted((n for n in files if PurePosixPath(n).name.lower() == "main.py"), key=lambda n: (n.count("/"), n))
+    if not mains:
+        raise ValueError("в проекте нет main.py")
+    return mains[0]
+
+def store(uid, name, files):
+    entry = find_entry(files)
+    pid = next((p for p, m in listing(uid) if m["name"] == name), None) or uuid.uuid4().hex[:8]
+    if (uid, pid) in runs:
+        raise ValueError("проект сейчас запущен, сначала остановите его")
+    pd = pdir(uid, pid)
+    shutil.rmtree(pd / "code", ignore_errors=True)
+    for n, b in files.items():
+        p = pd / "code" / n
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b)
+    (pd / "meta.json").write_text(json.dumps({"name": name, "entry": entry, "t": time.time()}), encoding="utf-8")
+    return pid
+
+def render(run, m):
+    if not run.done:
+        st = "● работает"
+    elif run.stopped:
+        st = f"■ остановлен ({int(time.time() - run.t0)} с)"
+    else:
+        st = f"○ завершён, код {run.code} ({int(time.time() - run.t0)} с)"
+    n = 3000
+    while n > 0:
+        tail = esc(run.text[-n:])
+        if len(tail) <= 3300:
+            break
+        n = n * 2 // 3
+    else:
+        tail = esc(run.text[-500:])
+    return f"<b>BLACK VPS</b>  <code>{esc(m['name'])}</code>\n{st}\n\n<pre>{tail or '...'}</pre>"
+
+def run_kb(pid, done):
+    if done:
+        return kb([("▶ Заново", f"r:{pid}"), ("Лог", f"g:{pid}")], [("‹ Проекты", "l:0")])
+    return kb([("■ Стоп", f"s:{pid}"), ("↻ Перезапуск", f"rr:{pid}")])
+
+async def pump(run, proc):
+    while True:
+        data = await proc.stdout.read(2048)
+        if not data:
+            break
+        run.add(data.decode(errors="replace"))
+    return await proc.wait()
 
 def limits():
-    resource.setrlimit(resource.RLIMIT_AS, (MEM, MEM))
+    if MEM:
+        resource.setrlimit(resource.RLIMIT_AS, (MEM, MEM))
 
+async def install(run, pd, base):
+    rf = base / "requirements.txt"
+    if not rf.is_file():
+        return ""
+    lines = [l.split(" #")[0].strip() for l in rf.read_text(encoding="utf-8-sig", errors="replace").splitlines()]
+    reqs = [l for l in lines if l and not l.startswith(("#", "-"))]
+    if not reqs:
+        return ""
+    libs = pd / "libs" / hashlib.sha1("\n".join(sorted(reqs)).encode()).hexdigest()[:12]
+    if not (libs / ".ok").exists():
+        run.add("$ pip install " + " ".join(reqs) + "\n")
+        shutil.rmtree(libs, ignore_errors=True)
+        libs.mkdir(parents=True)
+        run.proc = await asyncio.create_subprocess_exec(
+            sys.executable, "-m", "pip", "install", "-q", "--disable-pip-version-check", "--no-input",
+            "--target", str(libs), *reqs, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+            env={"PATH": os.environ.get("PATH", ""), "HOME": str(pd)}, start_new_session=True)
+        if await pump(run, run.proc):
+            shutil.rmtree(libs, ignore_errors=True)
+            raise RuntimeError("зависимости не установились")
+        (libs / ".ok").touch()
+    return str(libs)
 
-def unpack(data, dest):
-    """Распаковывает zip в dest. Возвращает (папка с main.py, имя main.py, число остальных .py)."""
+async def execute(bot, chat, uid, pid, run):
+    m, pd = meta(uid, pid), pdir(uid, pid)
+    entry = pd / "code" / m["entry"]
+    ticker = asyncio.create_task(tick(bot, chat, uid, pid, run, m))
     try:
-        z = zipfile.ZipFile(io.BytesIO(data))
-    except zipfile.BadZipFile:
-        raise ValueError("Это не ZIP-архив или он повреждён")
-    root = os.path.realpath(dest)
-    os.makedirs(root, exist_ok=True)
-    total = 0
-    with z:
-        infos = [i for i in z.infolist() if not i.is_dir() and not i.filename.startswith("__MACOSX/")
-                 and not os.path.basename(i.filename).startswith("._")]
-        if len(infos) > MAX_FILES:
-            raise ValueError(f"В архиве слишком много файлов (максимум {MAX_FILES})")
-        for i in infos:
-            if (i.external_attr >> 16) & 0o170000 == 0o120000:  # симлинки пропускаем
-                continue
-            target = os.path.realpath(os.path.join(root, i.filename.replace("\\", "/")))
-            if not target.startswith(root + os.sep):
-                raise ValueError("Небезопасный путь в архиве: " + i.filename)
-            os.makedirs(os.path.dirname(target), exist_ok=True)
-            with z.open(i) as src, open(target, "wb") as out:
-                while True:
-                    chunk = src.read(65536)
-                    if not chunk:
-                        break
-                    total += len(chunk)
-                    if total > MAX_UNZIP:
-                        raise ValueError("Архив слишком большой после распаковки (максимум 30 МБ)")
-                    out.write(chunk)
-    pys, mains = 0, []
-    for dp, _, fs in os.walk(root):
-        for f in fs:
-            if f.endswith(".py"):
-                pys += 1
-            if f.lower() == "main.py":
-                mains.append(os.path.join(dp, f))
-    if not mains:
-        raise ValueError("В архиве нет main.py (запускается только он). Положите main.py в корень архива.")
-    mains.sort(key=lambda p: (p.count(os.sep), p))
-    return os.path.dirname(mains[0]), os.path.basename(mains[0]), pys - 1
-
-
-def read_reqs(path):
-    """Читает requirements.txt: (список пакетов, пропущенные строки с параметрами -...)."""
-    ok, skipped = [], []
-    with open(path, encoding="utf-8-sig", errors="replace") as f:
-        for line in f:
-            line = line.split(" #")[0].strip()
-            if line and not line.startswith("#"):
-                (skipped if line.startswith("-") else ok).append(line)
-    return ok, skipped
-
-
-def worker(t, data=None):
-    tid, uid = t["id"], t["uid"]
-    home = f"/tmp/u{uid}"
-    base = f"{home}/p{tid}"
-    try:
-        os.makedirs(home, exist_ok=True)
-        cwd, script, reqs = home, None, []
-        manual = t["requirements"].split()
-        if any(x.startswith("-") for x in manual):
-            t["output"], t["exit_code"] = "pip: параметры (-...) запрещены", 1
-            return
-        if data is not None:
-            t["status"] = "installing"
-            t["output"] = "📂 Распаковываю архив...\n"
-            cwd, main, others = unpack(data, base)
-            data = None
-            script = os.path.join(cwd, main)
-            t["output"] += f"✅ Запускаю {main}, остальные .py ({others}) не трогаю\n"
-            for d in (cwd, base):
-                rf = os.path.join(d, "requirements.txt")
-                if os.path.isfile(rf):
-                    found, skipped = read_reqs(rf)
-                    reqs += found
-                    t["output"] += f"📄 Нашёл requirements.txt: {len(found)} пакетов\n"
-                    if skipped:
-                        t["output"] += "⚠️ Пропустил строки с параметрами (-...): " + ", ".join(skipped) + "\n"
-                    break
-        for r in manual:
-            if r not in reqs:
-                reqs.append(r)
-        libs = ""
-        if reqs:
-            t["status"] = "installing"
-            libs = f"/tmp/libs/{uid}/" + hashlib.sha1("\n".join(sorted(reqs)).encode()).hexdigest()[:12]
-            with inst_locks.setdefault(libs, threading.Lock()):
-                if os.path.exists(libs + "/.ok"):
-                    t["output"] += "📦 Библиотеки уже установлены\n"
-                else:
-                    t["output"] += "📦 Устанавливаю: " + ", ".join(reqs) + "\n"
-                    shutil.rmtree(libs, ignore_errors=True)
-                    os.makedirs(libs)
-                    p = subprocess.Popen([sys.executable, "-m", "pip", "install", "-q", "--disable-pip-version-check",
-                                          "--no-input", "--target", libs] + reqs,
-                                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-                                         errors="replace", start_new_session=True)
-                    procs[tid] = p
-                    try:
-                        out, _ = p.communicate(timeout=600)
-                    except subprocess.TimeoutExpired:
-                        kill(p)
-                        out = p.communicate()[0] + "\n[таймаут установки]"
-                    procs.pop(tid, None)
-                    if p.returncode:
-                        shutil.rmtree(libs, ignore_errors=True)
-                        t["output"] = (t["output"] + "❌ pip:\n" + out)[-MAX_OUT:]
-                        t["exit_code"] = p.returncode
-                        return
-                    open(libs + "/.ok", "w").close()
-                    t["output"] += "✅ Библиотеки установлены\n"
-        env = {"PATH": os.environ.get("PATH", ""), "HOME": home, "PYTHONPATH": libs,
-               "PYTHONUNBUFFERED": "1", "LANG": "C.UTF-8"}
-        if script:
-            cmd, shell = [sys.executable, script], False
-        elif t["kind"] == "shell":
-            cmd, shell = t["code"], True
-        else:
-            path = f"{home}/{tid}.py"
-            open(path, "w", encoding="utf-8").write(t["code"])
-            cmd, shell = [sys.executable, path], False
-        p = subprocess.Popen(cmd, shell=shell, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                             text=True, errors="replace", env=env, cwd=cwd,
-                             start_new_session=True, preexec_fn=limits)
-        procs[tid] = p
-        t["status"] = "running"
-        if t["timeout"]:
-            def on_timeout():
-                if p.poll() is None:
-                    t["note"] = "таймаут"
-                    kill(p)
-            threading.Timer(t["timeout"], on_timeout).start()
-        for line in p.stdout:
-            t["output"] = (t["output"] + line)[-MAX_OUT:]
-        p.wait()
-        t["exit_code"] = p.returncode
-        if t.get("note"):
-            t["output"] += f"\n[{t['note']}]"
-    except ValueError as e:
-        t["output"], t["exit_code"] = f"❌ {e}", 1
+        libs = await install(run, pd, entry.parent)
+        if not run.stopped:
+            home = pd / "home"
+            home.mkdir(exist_ok=True)
+            run.proc = await asyncio.create_subprocess_exec(
+                sys.executable, "-u", entry.name, cwd=entry.parent, stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, start_new_session=True,
+                preexec_fn=limits, env={"PATH": os.environ.get("PATH", ""), "HOME": str(home), "PYTHONPATH": libs,
+                                        "PYTHONUNBUFFERED": "1", "LANG": "C.UTF-8"})
+            run.code = await pump(run, run.proc)
     except Exception as e:
-        t["output"], t["exit_code"] = f"Ошибка: {e}", 1
-    finally:
-        t["status"] = "done"
-        procs.pop(tid, None)
-        shutil.rmtree(base, ignore_errors=True)
+        run.add(f"\n{e}\n")
+        run.code = -1
+    run.done = True
+    run.log.close()
+    await ticker
+    runs.pop((uid, pid), None)
 
+async def tick(bot, chat, uid, pid, run, m):
+    last = None
+    while True:
+        await asyncio.sleep(2)
+        fin = run.done
+        txt = render(run, m)
+        if txt != last:
+            try:
+                await bot.edit_message_text(txt, chat_id=chat, message_id=run.msg, reply_markup=run_kb(pid, fin))
+                last = txt
+            except TelegramRetryAfter as e:
+                await asyncio.sleep(e.retry_after)
+                continue
+            except TelegramAPIError:
+                last = txt
+        if fin:
+            break
 
-@app.post("/api/task")
-@login_required()
-def create_task(u):
-    d = request.get_json(silent=True) or {}
-    kind, code = d.get("kind", "python"), d.get("code", "")
-    if kind not in ("python", "shell", "service"):
-        return jsonify(error="bad kind"), 400
-    zb, data = d.get("zip"), None
-    if zb:
-        if kind == "shell":
-            return jsonify(error="ZIP нельзя запускать как Shell, выберите Python или Сервис"), 400
-        if not isinstance(zb, str) or len(zb) > MAX_ZIP * 4 // 3 + 16:
-            return jsonify(error="ZIP слишком большой (максимум 5 МБ)"), 400
+async def launch(bot, chat, uid, pid):
+    if (uid, pid) in runs:
+        return False
+    run = Run(pdir(uid, pid) / "run.log")
+    runs[(uid, pid)] = run
+    sent = await bot.send_message(chat, render(run, meta(uid, pid)), reply_markup=run_kb(pid, False))
+    run.msg = sent.message_id
+    t = asyncio.create_task(execute(bot, chat, uid, pid, run))
+    jobs.add(t)
+    t.add_done_callback(jobs.discard)
+    return True
+
+async def put(target, text, markup=None):
+    if isinstance(target, CallbackQuery):
         try:
-            data = base64.b64decode(zb, validate=True)
-        except (binascii.Error, ValueError):
-            return jsonify(error="Не удалось прочитать ZIP"), 400
-        code = ""
-    elif not isinstance(code, str) or not code.strip() or len(code) > MAX_CODE:
-        return jsonify(error="bad code"), 400
-    reqs = d.get("requirements", "")
-    if not isinstance(reqs, str) or len(reqs) > 5000:
-        return jsonify(error="bad requirements"), 400
+            await target.message.edit_text(text, reply_markup=markup)
+        except TelegramAPIError:
+            pass
+    else:
+        await target.answer(text, reply_markup=markup)
+
+async def show_list(target, uid, page=0):
+    items = listing(uid)
+    if not items:
+        return await put(target, "<b>BLACK VPS</b>\nПроектов пока нет. Пришлите .py или .zip.")
+    pages = (len(items) - 1) // PER_PAGE + 1
+    page = min(max(page, 0), pages - 1)
+    rows = [[(("● " if (uid, p) in runs else "○ ") + m["name"], f"p:{p}")] for p, m in items[page * PER_PAGE:(page + 1) * PER_PAGE]]
+    if pages > 1:
+        rows.append([("‹", f"l:{page - 1}"), (f"{page + 1}/{pages}", f"l:{page}"), ("›", f"l:{page + 1}")])
+    await put(target, f"<b>BLACK VPS</b>\nПроектов: {len(items)}", kb(*rows))
+
+async def show_card(target, uid, pid):
+    m = meta(uid, pid)
+    code = pdir(uid, pid) / "code"
+    files = [f for f in code.rglob("*") if f.is_file()]
+    size = sum(f.stat().st_size for f in files) // 1024
+    on = (uid, pid) in runs
+    text = (f"<b>{esc(m['name'])}</b>\nзапуск: <code>{esc(m['entry'])}</code>\n"
+            f"файлов: {len(files)}, {size} КБ\nстатус: {'работает' if on else 'остановлен'}")
+    first = ("■ Стоп", f"s:{pid}") if on else ("▶ Запустить", f"r:{pid}")
+    await put(target, text, kb([first, ("Лог", f"g:{pid}")], [("Скачать", f"z:{pid}"), ("Удалить", f"d:{pid}")],
+                               [("‹ Проекты", "l:0")]))
+
+@r.message(CommandStart())
+@r.message(F.text == "Помощь")
+async def start(m: Message):
+    await m.answer("<b>BLACK VPS</b>\nПришлите .py или .zip, из архива запускается main.py. "
+                   "Несколько .py одним альбомом собираются в один проект.\n"
+                   "Если рядом лежит requirements.txt, пакеты поставятся сами. "
+                   "Пока проект работает, любой ваш текст уходит ему в stdin.", reply_markup=MENU)
+
+@r.message(F.text == "Загрузить")
+async def upload_hint(m: Message):
+    await m.answer("Отправьте файл .py или архив .zip (до 20 МБ).")
+
+@r.message(F.text == "Проекты")
+async def projects(m: Message):
+    await show_list(m, m.from_user.id)
+
+@r.message(F.text)
+async def stdin(m: Message):
+    mine = [(k, v) for k, v in runs.items() if k[0] == m.from_user.id and v.proc and v.proc.stdin and not v.done]
+    if not mine:
+        return await m.answer("Нет запущенных проектов. Откройте «Проекты».")
+    run = max(mine, key=lambda x: x[1].t0)[1]
     try:
-        timeout = 0 if kind == "service" else min(max(int(d.get("timeout", 60)), 1), 600)
-    except (TypeError, ValueError):
-        timeout = 60
-    with lock:
-        active = sum(1 for t in tasks.values() if t["uid"] == u["id"] and t["status"] != "done")
-        if active >= (10 if u["admin"] else 3):
-            return jsonify(error="Слишком много активных задач, остановите лишние"), 429
-        tid = uuid.uuid4().hex[:8]
-        t = {"id": tid, "uid": u["id"], "name": str(d.get("name", ""))[:60], "kind": kind, "code": code,
-             "requirements": reqs, "timeout": timeout, "status": "pending", "output": "", "exit_code": None}
-        tasks[tid] = t
-        order.append(tid)
-        while len(order) > MAX_TASKS:
-            old = order.pop(0)
-            kill(procs.get(old))
-            tasks.pop(old, None)
-    threading.Thread(target=worker, args=(t, data), daemon=True).start()
-    return jsonify(id=tid)
+        run.proc.stdin.write((m.text + "\n").encode())
+        await run.proc.stdin.drain()
+        run.add("> " + m.text + "\n")
+    except (BrokenPipeError, ConnectionResetError):
+        await m.answer("Процесс уже не принимает ввод.")
+    try:
+        await m.delete()
+    except TelegramAPIError:
+        pass
 
+async def reply_created(m, name, pid):
+    await m.answer(f"Загружено: <b>{esc(name)}</b>", reply_markup=kb([("▶ Запустить", f"r:{pid}"), ("Открыть", f"p:{pid}")]))
 
-@app.post("/api/stop/<tid>")
-@login_required()
-def stop(u, tid):
-    t = tasks.get(tid)
-    if t and (t["uid"] == u["id"] or u["admin"]):
-        kill(procs.get(tid))
-    return jsonify(ok=True)
+async def flush_group(m, gid):
+    await asyncio.sleep(3)
+    files = groups.pop(gid)
+    uid = m.from_user.id
+    try:
+        if any(n.lower() == "main.py" for n, _, _ in files):
+            name = next((c for _, _, c in files if c), None) or "набор " + time.strftime("%H%M%S")
+            pid = store(uid, name[:40], {n: b for n, b, _ in files})
+            await reply_created(m, name[:40], pid)
+        else:
+            for n, b, _ in files:
+                await reply_created(m, n, store(uid, n, {n: b}))
+    except ValueError as e:
+        await m.answer(f"Ошибка: {esc(str(e))}")
 
+@r.message(F.document)
+async def document(m: Message):
+    d = m.document
+    name = Path(d.file_name or "file").name
+    ext = Path(name).suffix.lower()
+    if ext not in (".py", ".zip"):
+        return await m.answer("Принимаю только .py и .zip")
+    if d.file_size and d.file_size > MAX_FILE:
+        return await m.answer("Файл больше 20 МБ, Telegram не отдаёт такие боту.")
+    buf = io.BytesIO()
+    await m.bot.download(d, destination=buf)
+    raw = buf.getvalue()
+    if m.media_group_id and ext == ".py":
+        first = m.media_group_id not in groups
+        groups.setdefault(m.media_group_id, []).append((name, raw, m.caption))
+        if first:
+            await flush_group(m, m.media_group_id)
+        return
+    try:
+        if ext == ".zip":
+            name, files = name[:-4], await asyncio.to_thread(unzip, raw)
+        else:
+            files = {name: raw}
+        await reply_created(m, name, store(m.from_user.id, name[:40], files))
+    except (ValueError, zipfile.BadZipFile, RuntimeError) as e:
+        await m.answer(f"Ошибка: {esc(str(e))}")
 
-@app.get("/api/tasks")
-@login_required()
-def list_tasks(u):
-    keys = ("id", "name", "kind", "status", "exit_code", "output")
-    mine = [tasks[i] for i in reversed(order) if i in tasks and tasks[i]["uid"] == u["id"]][:20]
-    return jsonify(tasks=[{k: t[k] for k in keys} for t in mine])
+@r.callback_query()
+async def buttons(c: CallbackQuery):
+    uid = c.from_user.id
+    act, _, arg = c.data.partition(":")
+    
+    if act == "check_sub":
+        await c.message.delete()
+        await c.message.answer("✅ Подписка подтверждена! Отправьте /start для начала работы.")
+        return await c.answer()
 
+    if act == "l":
+        await show_list(c, uid, int(arg))
+        return await c.answer()
+    if not PID.fullmatch(arg) or not (pdir(uid, arg) / "meta.json").is_file():
+        return await c.answer("Проект не найден", show_alert=True)
+    key = (uid, arg)
+    if act == "p":
+        await show_card(c, uid, arg)
+    elif act == "r":
+        if not await launch(c.bot, c.message.chat.id, uid, arg):
+            return await c.answer("Уже запущен", show_alert=True)
+    elif act == "rr":
+        if key in runs:
+            kill(runs[key])
+            for _ in range(50):
+                if key not in runs:
+                    break
+                await asyncio.sleep(0.1)
+        await launch(c.bot, c.message.chat.id, uid, arg)
+    elif act == "s":
+        if key in runs:
+            kill(runs[key])
+    elif act == "g":
+        log = pdir(uid, arg) / "run.log"
+        if not log.is_file() or not log.stat().st_size:
+            return await c.answer("Лог пуст", show_alert=True)
+        await c.message.answer_document(BufferedInputFile(log.read_bytes(), filename=f"{meta(uid, arg)['name']}.log"))
+    elif act == "z":
+        out = io.BytesIO()
+        code = pdir(uid, arg) / "code"
+        with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+            for f in code.rglob("*"):
+                if f.is_file():
+                    z.write(f, f.relative_to(code))
+        await c.message.answer_document(BufferedInputFile(out.getvalue(), filename=f"{meta(uid, arg)['name']}.zip"))
+    elif act == "d":
+        await put(c, f"Удалить <b>{esc(meta(uid, arg)['name'])}</b>?", kb([("Да, удалить", f"x:{arg}"), ("Отмена", f"p:{arg}")]))
+    elif act == "x":
+        if key in runs:
+            kill(runs[key])
+        shutil.rmtree(pdir(uid, arg), ignore_errors=True)
+        await show_list(c, uid)
+    await c.answer()
 
-@app.errorhandler(413)
-def too_big(e):
-    return jsonify(error="Файл слишком большой (ZIP до 5 МБ)"), 413
-
-
-@app.get("/health")
-def health():
-    return "ok"
-
-
-PAGE = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html"), encoding="utf-8").read()
-
-
-@app.get("/")
-def index():
-    return Response(PAGE, mimetype="text/html")
-
+async def main():
+    ROOT.mkdir(parents=True, exist_ok=True)
+    bot = Bot(TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    dp = Dispatcher()
+    dp.include_routers(r) # deny больше не нужен, фильтр сам отсеет лишних
+    try:
+        await dp.start_polling(bot)
+    finally:
+        for run in runs.values():
+            kill(run)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    asyncio.run(main())
