@@ -7,7 +7,7 @@ services:
     startCommand: gunicorn app:app --workers 1 --threads 8 --timeout 60
     healthCheckPath: /health
     envVars:
-      - key: TOKEN
+      - key: xxW6f7phDSoPiYDPcw-iHCQt3MKaEBsA
         generateValue: true
       - key: PYTHON_VERSION
         value: 3.12.3
