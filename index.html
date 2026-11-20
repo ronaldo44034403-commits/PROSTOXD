@@ -1,46 +1,78 @@
 <!doctype html><html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0b1020"><link rel="manifest" href="/manifest.json">
-<title>Phone VPS</title><style>
+<meta name="theme-color" content="#0b1020"><title>Phone VPS</title><style>
 :root{--bg:#0b1020;--card:rgba(255,255,255,.06);--line:rgba(255,255,255,.12);--a:#7c5cff;--b:#22d3ee;--t:#e8ecff;--m:#8b93b8}
 *{box-sizing:border-box}
-body{margin:0;min-height:100vh;font-family:system-ui,sans-serif;color:var(--t);
-background:radial-gradient(900px 500px at 10% -10%,#2a1f6b 0%,transparent 60%),radial-gradient(700px 500px at 100% 0,#0e4a63 0%,transparent 55%),var(--bg);
-padding:calc(env(safe-area-inset-top) + 12px) 12px calc(env(safe-area-inset-bottom) + 12px)}
+body{margin:0;min-height:100vh;font-family:system-ui,sans-serif;color:var(--t);background:radial-gradient(900px 500px at 10% -10%,#2a1f6b 0%,transparent 60%),radial-gradient(700px 500px at 100% 0,#0e4a63 0%,transparent 55%),var(--bg);padding:calc(env(safe-area-inset-top) + 12px) 12px calc(env(safe-area-inset-bottom) + 12px)}
 .w{max-width:720px;margin:0 auto}
-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px}
 h1{font-size:20px;margin:0;background:linear-gradient(90deg,var(--a),var(--b));-webkit-background-clip:text;color:transparent}
-.pill{font-size:12px;padding:5px 10px;border-radius:99px;background:var(--card);border:1px solid var(--line)}
-.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px;margin-bottom:12px;backdrop-filter:blur(8px)}
+.pill{font-size:12px;padding:5px 10px;border-radius:99px;background:var(--card);border:1px solid var(--line);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60%}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px;margin-bottom:12px}
 input,select,textarea{width:100%;margin:4px 0;padding:11px;font-size:15px;color:var(--t);background:rgba(0,0,0,.35);border:1px solid var(--line);border-radius:10px;outline:none}
-textarea{font-family:ui-monospace,monospace;font-size:13px;height:170px}
-#req{height:70px}
+textarea{font-family:ui-monospace,monospace;font-size:13px;height:170px}#req{height:70px}
 .row{display:flex;gap:8px;align-items:center}.row>*{flex:1}
 button{padding:11px;border:0;border-radius:10px;color:#fff;font-size:15px;font-weight:600;background:rgba(255,255,255,.1)}
-button.p{background:linear-gradient(90deg,var(--a),var(--b))}
-button.d{background:#7f1d2d;flex:0 0 52px}
-.proj{padding:10px;border-radius:10px;border:1px solid var(--line);margin:4px 0;display:flex;justify-content:space-between}
+button.p{background:linear-gradient(90deg,var(--a),var(--b))}button.d{background:#7f1d2d;flex:0 0 auto;padding:11px 14px}
+.proj,.usr{padding:10px;border-radius:10px;border:1px solid var(--line);margin:4px 0;display:flex;justify-content:space-between;align-items:center;gap:8px}
 .proj.on{border-color:var(--b);background:rgba(34,211,238,.08)}
 pre{margin:6px 0;padding:10px;border-radius:10px;background:rgba(0,0,0,.4);white-space:pre-wrap;word-break:break-word;font-size:12px}
 .s-done{color:#4ade80}.s-running{color:#facc15}.s-pending{color:var(--m)}
-small{color:var(--m)}
+small,.msg{color:var(--m)}.msg.err{color:#f87171}.msg.ok{color:#4ade80}
 </style></head><body><div class="w">
-<header><h1>⚡ Phone VPS</h1><span class="pill" id="st">…</span></header>
-<div class="card" id="login"><input id="tok" type="password" placeholder="Токен"><button class="p" style="width:100%" onclick="saveTok()">Войти</button></div>
-<div class="card"><div class="row"><b>Проекты</b><button onclick="newP()">+ Новый</button></div><div id="plist"></div></div>
-<div class="card">
-<input id="name" placeholder="Название проекта">
-<select id="kind"><option value="python">Python</option><option value="shell">Shell</option><option value="service">Сервис (работает постоянно)</option></select>
-<textarea id="req" placeholder="Библиотеки (requirements), по одной в строке, например: requests"></textarea>
-<textarea id="code" placeholder="print('привет с телефона')"></textarea>
-<div class="row"><button onclick="save()">💾 Сохранить</button><button class="p" onclick="run()">▶ Запуск</button><button class="d" onclick="del()">🗑</button></div>
+<header><h1>Phone VPS</h1><span class="pill" id="who" hidden></span></header>
+
+<div id="auth" class="card" hidden>
+ <div class="row"><button id="tl" class="p" onclick="mode('login')">Вход</button><button id="tr" onclick="mode('reg')">Регистрация</button></div>
+ <input id="em" type="email" placeholder="Email" autocomplete="username">
+ <input id="pw" type="password" placeholder="Пароль (от 8 символов)" autocomplete="current-password">
+ <button class="p" style="width:100%" id="go" onclick="submitAuth()">Войти</button>
+ <div id="gbtn" style="margin-top:10px"></div>
+ <div id="amsg" class="msg"></div>
 </div>
-<div class="card"><b>Результаты</b><div id="list"></div></div>
-</div><script>
+
+<div id="app" hidden>
+ <div class="card" id="admin" hidden><div class="row"><b>Пользователи</b><button onclick="loadUsers()">Обновить</button></div><div id="ulist"></div></div>
+ <div class="card"><div class="row"><b>Проекты</b><button onclick="newP()">+ Новый</button></div><div id="plist"></div></div>
+ <div class="card">
+  <input id="name" placeholder="Название проекта">
+  <select id="kind"><option value="python">Python</option><option value="shell">Shell</option><option value="service">Сервис (работает постоянно)</option></select>
+  <textarea id="req" placeholder="Библиотеки, по одной в строке, например: requests"></textarea>
+  <textarea id="code" placeholder="print('привет')"></textarea>
+  <div class="row"><button onclick="save()">Сохранить</button><button class="p" onclick="run()">Запуск</button><button class="d" onclick="del()">Удалить</button></div>
+  <div id="rmsg" class="msg"></div>
+ </div>
+ <div class="card"><b>Результаты</b><div id="list"></div></div>
+ <button style="width:100%" onclick="logout()">Выйти</button>
+</div></div>
+<script>
 const $=id=>document.getElementById(id);
-let P=JSON.parse(localStorage.getItem('p')||'[]'),cur=null,tok=localStorage.getItem('tok')||'';
-function persist(){localStorage.setItem('p',JSON.stringify(P));}
-function saveTok(){tok=$('tok').value;localStorage.setItem('tok',tok);$('login').hidden=!!tok;refresh();}
+let M=null,P=[],cur=null,cfg={},reg=false,timer=null;
+async function api(path,body){
+ const r=await fetch(path,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
+ const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||('Ошибка '+r.status));return j;}
+function msg(el,t,c){el.textContent=t||'';el.className='msg '+(c||'');}
+function mode(m){reg=m==='reg';$('tl').className=reg?'':'p';$('tr').className=reg?'p':'';$('go').textContent=reg?'Создать аккаунт':'Войти';msg($('amsg'));}
+async function submitAuth(){
+ try{const b={email:$('em').value,password:$('pw').value};
+  if(reg){const j=await api('/api/register',b);msg($('amsg'),j.message,'ok');}
+  else{await api('/api/login',b);await start();}
+ }catch(e){msg($('amsg'),e.message,'err');}}
+async function google(resp){
+ try{await api('/api/google',{credential:resp.credential});await start();}catch(e){msg($('amsg'),e.message,'err');}}
+function initGoogle(){
+ if(!cfg.google)return;const s=document.createElement('script');s.src='https://accounts.google.com/gsi/client';
+ s.onload=()=>{google_ready()};document.head.appendChild(s);}
+function google_ready(){window.google.accounts.id.initialize({client_id:cfg.google,callback:google});
+ window.google.accounts.id.renderButton($('gbtn'),{theme:'filled_black',size:'large',text:'continue_with',width:280});}
+async function logout(){await api('/api/logout',{});clearInterval(timer);M=null;show();}
+function show(){$('auth').hidden=!!M;$('app').hidden=!M;$('who').hidden=!M;if(M)$('who').textContent=M.email;}
+async function start(){
+ M=await api('/api/me');show();
+ P=JSON.parse(localStorage.getItem('p:'+M.email)||'[]');cur=null;load();render();
+ $('admin').hidden=!M.admin;if(M.admin)loadUsers();
+ clearInterval(timer);timer=setInterval(refresh,3000);refresh();}
+function persist(){localStorage.setItem('p:'+M.email,JSON.stringify(P));}
 function render(){const b=$('plist');b.textContent='';
  P.forEach((p,i)=>{const d=document.createElement('div');d.className='proj'+(i===cur?' on':'');
   d.textContent=p.name;const k=document.createElement('small');k.textContent=p.kind;d.appendChild(k);
@@ -51,17 +83,24 @@ function newP(){P.push({name:'Проект '+(P.length+1),kind:'python',req:'',c
 function save(){if(cur===null)newP();
  P[cur]={name:$('name').value||'Без имени',kind:$('kind').value,req:$('req').value,code:$('code').value};persist();render();}
 function del(){if(cur===null)return;P.splice(cur,1);cur=null;persist();load();render();}
-async function api(path,opt={}){const r=await fetch(path,{...opt,headers:{'X-Token':tok,'Content-Type':'application/json'}});
- if(!r.ok)throw new Error(r.status);return r.json();}
-async function run(){save();
- try{await api('/api/task',{method:'POST',body:JSON.stringify({kind:$('kind').value,code:$('code').value,requirements:$('req').value,name:$('name').value})});refresh();}
- catch(e){$('st').textContent='ошибка токена';}}
-async function refresh(){if(!tok)return;
- try{const s=await api('/api/status');$('st').textContent=s.phone_online?'☁️ Render онлайн':'📴 офлайн';
-  const l=await api('/api/tasks');const box=$('list');box.textContent='';
+async function run(){save();msg($('rmsg'));
+ try{await api('/api/task',{kind:$('kind').value,code:$('code').value,requirements:$('req').value,name:$('name').value});refresh();}
+ catch(e){msg($('rmsg'),e.message,'err');}}
+async function refresh(){if(!M)return;
+ try{const l=await api('/api/tasks');const box=$('list');box.textContent='';
   for(const t of l.tasks){const d=document.createElement('pre');
    d.textContent='#'+t.id+' '+(t.name||'')+' ['+t.status+']'+(t.exit_code!=null?' код '+t.exit_code:'')+'\n'+(t.output||'');
-   d.className='s-'+t.status;if(t.kind==='service'&&t.status==='running'){const b=document.createElement('button');b.textContent='⏹ Стоп';b.onclick=()=>api('/api/stop/'+t.id,{method:'POST'});d.appendChild(b);}box.appendChild(d);}
- }catch(e){$('st').textContent='ошибка токена';}}
-$('login').hidden=!!tok;render();load();setInterval(refresh,3000);refresh();
+   d.className='s-'+t.status;
+   if(t.status!=='done'){const b=document.createElement('button');b.textContent='Стоп';b.onclick=()=>api('/api/stop/'+t.id,{});d.appendChild(b);}
+   box.appendChild(d);}
+ }catch(e){if(/401|unauthorized/.test(e.message)){M=null;show();}}}
+async function loadUsers(){
+ try{const j=await api('/api/users');const b=$('ulist');b.textContent='';
+  j.users.forEach(u=>{const d=document.createElement('div');d.className='usr';
+   const s=document.createElement('span');s.textContent=u.email+(u.admin?' (админ)':'')+(u.approved?'':' (ждёт)');d.appendChild(s);
+   if(!u.admin){const r=document.createElement('div');r.className='row';
+    if(!u.approved){const a=document.createElement('button');a.textContent='Одобрить';a.onclick=async()=>{await api('/api/users/'+u.id+'/approve',{});loadUsers();};r.appendChild(a);}
+    const x=document.createElement('button');x.className='d';x.textContent='Удалить';x.onclick=async()=>{if(confirm('Удалить '+u.email+'?')){await api('/api/users/'+u.id+'/delete',{});loadUsers();}};r.appendChild(x);d.appendChild(r);}
+   b.appendChild(d);});}catch(e){}}
+(async()=>{cfg=await api('/api/config').catch(()=>({}));initGoogle();try{await start();}catch(e){M=null;show();}})();
 </script></body></html>
