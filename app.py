@@ -3,8 +3,8 @@ from functools import wraps
 from flask import Flask, jsonify, request, session, Response
 from werkzeug.security import generate_password_hash, check_password_hash
 
-ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "ronaldo44034403@gmail.com").lower()
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "44034403)
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "CHANGE_ME@gmail.com").lower()
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "NfIb1lh10G606zTu")
 SECRET_KEY = os.environ.get("SECRET_KEY", "96a6a7be6bf538f2bfb00998fa8674461f7d2dc609b6feca612e1c82b39615b6")
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")  # пусто: вход через Google выключен
 
