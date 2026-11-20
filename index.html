@@ -1,0 +1,67 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b1020"><link rel="manifest" href="/manifest.json">
+<title>Phone VPS</title><style>
+:root{--bg:#0b1020;--card:rgba(255,255,255,.06);--line:rgba(255,255,255,.12);--a:#7c5cff;--b:#22d3ee;--t:#e8ecff;--m:#8b93b8}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;font-family:system-ui,sans-serif;color:var(--t);
+background:radial-gradient(900px 500px at 10% -10%,#2a1f6b 0%,transparent 60%),radial-gradient(700px 500px at 100% 0,#0e4a63 0%,transparent 55%),var(--bg);
+padding:calc(env(safe-area-inset-top) + 12px) 12px calc(env(safe-area-inset-bottom) + 12px)}
+.w{max-width:720px;margin:0 auto}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+h1{font-size:20px;margin:0;background:linear-gradient(90deg,var(--a),var(--b));-webkit-background-clip:text;color:transparent}
+.pill{font-size:12px;padding:5px 10px;border-radius:99px;background:var(--card);border:1px solid var(--line)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px;margin-bottom:12px;backdrop-filter:blur(8px)}
+input,select,textarea{width:100%;margin:4px 0;padding:11px;font-size:15px;color:var(--t);background:rgba(0,0,0,.35);border:1px solid var(--line);border-radius:10px;outline:none}
+textarea{font-family:ui-monospace,monospace;font-size:13px;height:170px}
+#req{height:70px}
+.row{display:flex;gap:8px;align-items:center}.row>*{flex:1}
+button{padding:11px;border:0;border-radius:10px;color:#fff;font-size:15px;font-weight:600;background:rgba(255,255,255,.1)}
+button.p{background:linear-gradient(90deg,var(--a),var(--b))}
+button.d{background:#7f1d2d;flex:0 0 52px}
+.proj{padding:10px;border-radius:10px;border:1px solid var(--line);margin:4px 0;display:flex;justify-content:space-between}
+.proj.on{border-color:var(--b);background:rgba(34,211,238,.08)}
+pre{margin:6px 0;padding:10px;border-radius:10px;background:rgba(0,0,0,.4);white-space:pre-wrap;word-break:break-word;font-size:12px}
+.s-done{color:#4ade80}.s-running{color:#facc15}.s-pending{color:var(--m)}
+small{color:var(--m)}
+</style></head><body><div class="w">
+<header><h1>⚡ Phone VPS</h1><span class="pill" id="st">…</span></header>
+<div class="card" id="login"><input id="tok" type="password" placeholder="Токен"><button class="p" style="width:100%" onclick="saveTok()">Войти</button></div>
+<div class="card"><div class="row"><b>Проекты</b><button onclick="newP()">+ Новый</button></div><div id="plist"></div></div>
+<div class="card">
+<input id="name" placeholder="Название проекта">
+<select id="kind"><option value="python">Python</option><option value="shell">Shell</option><option value="service">Сервис (работает постоянно)</option></select>
+<textarea id="req" placeholder="Библиотеки (requirements), по одной в строке, например: requests"></textarea>
+<textarea id="code" placeholder="print('привет с телефона')"></textarea>
+<div class="row"><button onclick="save()">💾 Сохранить</button><button class="p" onclick="run()">▶ Запуск</button><button class="d" onclick="del()">🗑</button></div>
+</div>
+<div class="card"><b>Результаты</b><div id="list"></div></div>
+</div><script>
+const $=id=>document.getElementById(id);
+let P=JSON.parse(localStorage.getItem('p')||'[]'),cur=null,tok=localStorage.getItem('tok')||'';
+function persist(){localStorage.setItem('p',JSON.stringify(P));}
+function saveTok(){tok=$('tok').value;localStorage.setItem('tok',tok);$('login').hidden=!!tok;refresh();}
+function render(){const b=$('plist');b.textContent='';
+ P.forEach((p,i)=>{const d=document.createElement('div');d.className='proj'+(i===cur?' on':'');
+  d.textContent=p.name;const k=document.createElement('small');k.textContent=p.kind;d.appendChild(k);
+  d.onclick=()=>{cur=i;load();render();};b.appendChild(d);});}
+function load(){const p=P[cur]||{name:'',kind:'python',req:'',code:''};
+ $('name').value=p.name;$('kind').value=p.kind;$('req').value=p.req;$('code').value=p.code;}
+function newP(){P.push({name:'Проект '+(P.length+1),kind:'python',req:'',code:''});cur=P.length-1;persist();load();render();}
+function save(){if(cur===null)newP();
+ P[cur]={name:$('name').value||'Без имени',kind:$('kind').value,req:$('req').value,code:$('code').value};persist();render();}
+function del(){if(cur===null)return;P.splice(cur,1);cur=null;persist();load();render();}
+async function api(path,opt={}){const r=await fetch(path,{...opt,headers:{'X-Token':tok,'Content-Type':'application/json'}});
+ if(!r.ok)throw new Error(r.status);return r.json();}
+async function run(){save();
+ try{await api('/api/task',{method:'POST',body:JSON.stringify({kind:$('kind').value,code:$('code').value,requirements:$('req').value,name:$('name').value})});refresh();}
+ catch(e){$('st').textContent='ошибка токена';}}
+async function refresh(){if(!tok)return;
+ try{const s=await api('/api/status');$('st').textContent=s.phone_online?'☁️ Render онлайн':'📴 офлайн';
+  const l=await api('/api/tasks');const box=$('list');box.textContent='';
+  for(const t of l.tasks){const d=document.createElement('pre');
+   d.textContent='#'+t.id+' '+(t.name||'')+' ['+t.status+']'+(t.exit_code!=null?' код '+t.exit_code:'')+'\n'+(t.output||'');
+   d.className='s-'+t.status;if(t.kind==='service'&&t.status==='running'){const b=document.createElement('button');b.textContent='⏹ Стоп';b.onclick=()=>api('/api/stop/'+t.id,{method:'POST'});d.appendChild(b);}box.appendChild(d);}
+ }catch(e){$('st').textContent='ошибка токена';}}
+$('login').hidden=!!tok;render();load();setInterval(refresh,3000);refresh();
+</script></body></html>
